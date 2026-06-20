@@ -9,7 +9,7 @@ import App from "./App";
 // deployment so hosting without env config still connects.
 const convexUrl =
   (import.meta.env.VITE_CONVEX_URL as string | undefined) ||
-  "https://savory-hornet-792.convex.cloud";
+  "https://neighborly-chihuahua-118.convex.cloud";
 
 const convex = new ConvexReactClient(convexUrl);
 
