@@ -3,19 +3,48 @@ import { useNavigate } from "react-router-dom";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCurrency, formatDate, hasRole } from "@/lib/utils";
-import type { Booking, BookingStatus, PaymentProofStatus } from "@/types";
+import type { Booking, BookingStatus, PaymentProofStatus, SeatType, PaymentMode } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Plus, Search, Eye, CheckCircle2, XCircle, Clock,
-  Phone, MapPin, CreditCard, User, ImageIcon
+  Phone, MapPin, CreditCard, User, ImageIcon, Pencil
 } from "lucide-react";
 import { toast } from "sonner";
+
+type EditForm = {
+  passengerName: string;
+  passengerMobile: string;
+  passengerAddress: string;
+  passengerAadhaar: string;
+  passengerAge: string;
+  passengerGender: "Male" | "Female" | "Other" | "unset";
+  tripId: string;
+  seatNumber: string;
+  seatType: SeatType;
+  packageAmount: string;
+  discount: string;
+  discountReason: string;
+  advancePaid: string;
+  status: BookingStatus;
+  source: Booking["source"];
+  collectedBy: string;
+  staffId: string;
+  paymentMode: PaymentMode | "none";
+  paymentReferenceNumber: string;
+  rewardCoins: string;
+  notes: string;
+};
+
+const SOURCES: Booking["source"][] = ["walk_in", "phone", "referral", "agent"];
+const PAYMENT_MODES: PaymentMode[] = ["cash", "upi", "bank_transfer", "card", "cheque"];
 
 const STATUS_COLORS: Record<BookingStatus, string> = {
   tentative: "bg-slate-100 text-slate-600",
@@ -47,6 +76,8 @@ export default function BookingManagement() {
   const [proofFilter, setProofFilter] = useState<PaymentProofStatus | "all">("all");
   const [viewId, setViewId] = useState<string | null>(null);
   const [screenshotOpen, setScreenshotOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<EditForm | null>(null);
 
   const stats = useMemo(() => ({
     total: bookings.filter(b => b.status !== "cancelled").length,
@@ -84,6 +115,82 @@ export default function BookingManagement() {
   const updateBookingStatus = (id: string, status: BookingStatus) => {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     toast.success("Booking status updated");
+  };
+
+  const openEdit = (b: Booking) => {
+    setForm({
+      passengerName: b.passengerName,
+      passengerMobile: b.passengerMobile,
+      passengerAddress: b.passengerAddress ?? "",
+      passengerAadhaar: b.passengerAadhaar ?? "",
+      passengerAge: b.passengerAge != null ? String(b.passengerAge) : "",
+      passengerGender: b.passengerGender ?? "unset",
+      tripId: b.tripId,
+      seatNumber: b.seatNumber,
+      seatType: b.seatType,
+      packageAmount: String(b.packageAmount),
+      discount: String(b.discount),
+      discountReason: b.discountReason ?? "",
+      advancePaid: String(b.advancePaid),
+      status: b.status,
+      source: b.source,
+      collectedBy: b.collectedBy,
+      staffId: b.staffId ?? "",
+      paymentMode: b.paymentMode ?? "none",
+      paymentReferenceNumber: b.paymentReferenceNumber ?? "",
+      rewardCoins: b.rewardCoins != null ? String(b.rewardCoins) : "",
+      notes: b.notes ?? "",
+    });
+    setEditId(b.id);
+  };
+
+  const upd = (patch: Partial<EditForm>) => setForm(f => f ? { ...f, ...patch } : f);
+
+  const saveEdit = () => {
+    if (!form || !editId) return;
+    if (!form.passengerName.trim()) { toast.error("Passenger name is required"); return; }
+    if (!form.passengerMobile.trim()) { toast.error("Mobile number is required"); return; }
+
+    const trip = trips.find(t => t.id === form.tripId);
+    if (!trip) { toast.error("Select a valid trip"); return; }
+
+    const packageAmount = Math.max(0, Number(form.packageAmount) || 0);
+    const discount = Math.max(0, Number(form.discount) || 0);
+    const finalAmount = Math.max(0, packageAmount - discount);
+    const advancePaid = Math.max(0, Number(form.advancePaid) || 0);
+    const pendingAmount = Math.max(0, finalAmount - advancePaid);
+
+    setBookings(prev => prev.map(b => b.id === editId ? {
+      ...b,
+      passengerName: form.passengerName.trim(),
+      passengerMobile: form.passengerMobile.trim(),
+      passengerAddress: form.passengerAddress.trim() || undefined,
+      passengerAadhaar: form.passengerAadhaar.trim() || undefined,
+      passengerAge: form.passengerAge !== "" ? Number(form.passengerAge) : undefined,
+      passengerGender: form.passengerGender === "unset" ? undefined : form.passengerGender,
+      tripId: trip.id,
+      tripName: trip.tripName,
+      seatNumber: form.seatNumber.trim(),
+      seatType: form.seatType,
+      packageAmount,
+      discount,
+      discountReason: form.discountReason.trim() || undefined,
+      finalAmount,
+      advancePaid,
+      pendingAmount,
+      status: form.status,
+      source: form.source,
+      collectedBy: form.collectedBy.trim(),
+      staffId: form.staffId.trim() || undefined,
+      paymentMode: form.paymentMode === "none" ? undefined : form.paymentMode,
+      paymentReferenceNumber: form.paymentReferenceNumber.trim() || undefined,
+      rewardCoins: form.rewardCoins !== "" ? Number(form.rewardCoins) : undefined,
+      notes: form.notes.trim() || undefined,
+    } : b));
+
+    toast.success("Booking updated");
+    setEditId(null);
+    setForm(null);
   };
 
   return (
@@ -169,7 +276,7 @@ export default function BookingManagement() {
                 <TableHead>Pending</TableHead>
                 <TableHead>Proof</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-12">View</TableHead>
+                <TableHead className="w-20 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -222,10 +329,17 @@ export default function BookingManagement() {
                     <TableCell>
                       <Badge className={`text-xs ${STATUS_COLORS[b.status]}`}>{b.status.replace(/_/g, " ")}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => setViewId(b.id)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-0.5">
+                        <Button variant="ghost" size="icon" onClick={() => setViewId(b.id)} title="View">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(b)} title="Edit">
+                            <Pencil className="h-4 w-4 text-blue-600" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -247,9 +361,17 @@ export default function BookingManagement() {
         <Dialog open={!!viewId} onOpenChange={() => setViewId(null)}>
           <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 flex-wrap pr-8">
                 <span className="font-mono text-base">{viewBooking.id}</span>
                 <Badge className={STATUS_COLORS[viewBooking.status]}>{viewBooking.status.replace(/_/g, " ")}</Badge>
+                {isAdmin && (
+                  <Button
+                    size="sm" variant="outline" className="ml-auto h-8"
+                    onClick={() => { const b = viewBooking; setViewId(null); openEdit(b); }}
+                  >
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                  </Button>
+                )}
               </DialogTitle>
             </DialogHeader>
 
@@ -405,6 +527,205 @@ export default function BookingManagement() {
           <DialogContent className="max-w-3xl">
             <DialogHeader><DialogTitle>Payment Screenshot</DialogTitle></DialogHeader>
             <img src={viewBooking.paymentScreenshot} alt="Payment proof" className="w-full object-contain max-h-[70vh] rounded-lg" />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Booking Dialog (admin only) */}
+      {isAdmin && form && (
+        <Dialog open={!!editId} onOpenChange={(o) => { if (!o) { setEditId(null); setForm(null); } }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-4 w-4 text-blue-600" /> Edit Booking
+                <span className="font-mono text-sm text-muted-foreground">{editId}</span>
+              </DialogTitle>
+              <DialogDescription>Update any booking detail. Final amount and balance are recalculated automatically.</DialogDescription>
+            </DialogHeader>
+
+            {(() => {
+              const pkg = Math.max(0, Number(form.packageAmount) || 0);
+              const disc = Math.max(0, Number(form.discount) || 0);
+              const finalAmount = Math.max(0, pkg - disc);
+              const advance = Math.max(0, Number(form.advancePaid) || 0);
+              const pending = Math.max(0, finalAmount - advance);
+              return (
+                <div className="space-y-5">
+                  {/* Passenger */}
+                  <section>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <User className="h-3.5 w-3.5" /> Passenger
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Name</Label>
+                        <Input value={form.passengerName} onChange={e => upd({ passengerName: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Mobile</Label>
+                        <Input value={form.passengerMobile} onChange={e => upd({ passengerMobile: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Age</Label>
+                        <Input type="number" min={0} value={form.passengerAge} onChange={e => upd({ passengerAge: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Gender</Label>
+                        <Select value={form.passengerGender} onValueChange={v => upd({ passengerGender: v as EditForm["passengerGender"] })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unset">—</SelectItem>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Aadhaar</Label>
+                        <Input value={form.passengerAadhaar} onChange={e => upd({ passengerAadhaar: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Address</Label>
+                        <Input value={form.passengerAddress} onChange={e => upd({ passengerAddress: e.target.value })} />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Trip & Seat */}
+                  <section>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Trip & Seat</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Trip</Label>
+                        <Select value={form.tripId} onValueChange={v => upd({ tripId: v })}>
+                          <SelectTrigger><SelectValue placeholder="Select trip" /></SelectTrigger>
+                          <SelectContent>
+                            {trips.map(t => <SelectItem key={t.id} value={t.id}>{t.tripName}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Seat Number</Label>
+                        <Input value={form.seatNumber} onChange={e => upd({ seatNumber: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Seat Type</Label>
+                        <Select value={form.seatType} onValueChange={v => upd({ seatType: v as SeatType })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="seat">Seat</SelectItem>
+                            <SelectItem value="sleeper">Sleeper</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Financials */}
+                  <section>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <CreditCard className="h-3.5 w-3.5" /> Financials
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Package Amount (₹)</Label>
+                        <Input type="number" min={0} value={form.packageAmount} onChange={e => upd({ packageAmount: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Discount (₹)</Label>
+                        <Input type="number" min={0} value={form.discount} onChange={e => upd({ discount: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Discount Reason</Label>
+                        <Input value={form.discountReason} onChange={e => upd({ discountReason: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Advance Paid (₹)</Label>
+                        <Input type="number" min={0} value={form.advancePaid} onChange={e => upd({ advancePaid: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Reward Coins</Label>
+                        <Input type="number" min={0} value={form.rewardCoins} onChange={e => upd({ rewardCoins: e.target.value })} />
+                      </div>
+                    </div>
+                    {/* Derived preview */}
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center bg-slate-50 rounded-lg p-3">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Final Amount</p>
+                        <p className="font-bold">{formatCurrency(finalAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Advance</p>
+                        <p className="font-bold text-green-600">{formatCurrency(advance)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Balance Due</p>
+                        <p className={`font-bold ${pending > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(pending)}</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Status & meta */}
+                  <section>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Status & Payment</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Status</Label>
+                        <Select value={form.status} onValueChange={v => upd({ status: v as BookingStatus })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(STATUS_COLORS) as BookingStatus[]).map(s => (
+                              <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Source</Label>
+                        <Select value={form.source} onValueChange={v => upd({ source: v as Booking["source"] })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {SOURCES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, " ")}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Payment Mode</Label>
+                        <Select value={form.paymentMode} onValueChange={v => upd({ paymentMode: v as EditForm["paymentMode"] })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">—</SelectItem>
+                            {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m.replace(/_/g, " ")}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Payment Reference</Label>
+                        <Input value={form.paymentReferenceNumber} onChange={e => upd({ paymentReferenceNumber: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Collected By</Label>
+                        <Input value={form.collectedBy} onChange={e => upd({ collectedBy: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Staff ID</Label>
+                        <Input value={form.staffId} onChange={e => upd({ staffId: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>Notes</Label>
+                        <Textarea rows={2} value={form.notes} onChange={e => upd({ notes: e.target.value })} />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              );
+            })()}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setEditId(null); setForm(null); }}>Cancel</Button>
+              <Button onClick={saveEdit}><CheckCircle2 className="h-4 w-4 mr-1" /> Save Changes</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
