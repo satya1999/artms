@@ -14,11 +14,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import ChampionshipPanel from "@/components/ChampionshipPanel";
+import { TripCountdown } from "@/components/TripCountdown";
 import { toast } from "sonner";
 import type { CoinWithdrawal, CoinWithdrawalMethod } from "@/types";
 import {
   Plus, CreditCard, CheckCircle2, Clock, ArrowRight, MapPin, Ticket, Gift, Trophy,
-  Coins, Wallet, Banknote, Hourglass, XCircle, History
+  Coins, Wallet, Banknote, Hourglass, XCircle, History, Bus
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -245,10 +246,12 @@ export default function StaffDashboard() {
             </Card>
           </div>
 
-          {/* Available Trips */}
+          {/* Available Trips · Seats & Countdown */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">Available Trips for Booking</h2>
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Bus className="h-4 w-4 text-brand" /> Available Trips · Seats & Countdown
+              </h2>
               <Button variant="outline" size="sm" onClick={() => navigate("/trips")}>
                 View All <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
@@ -257,38 +260,67 @@ export default function StaffDashboard() {
               <Card><CardContent className="p-8 text-center text-muted-foreground">No trips available for booking right now. Admin will publish trips soon.</CardContent></Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {publishedTrips.map((trip) => {
+                {[...publishedTrips].sort((a, b) => a.startDate.localeCompare(b.startDate)).map((trip) => {
                   const booked = bookings.filter(b => b.tripId === trip.id && b.status !== "cancelled").length;
-                  const available = trip.totalSeats - booked;
-                  const pct = Math.round((booked / trip.totalSeats) * 100);
+                  const available = Math.max(0, trip.totalSeats - booked);
+                  const pct = trip.totalSeats > 0 ? Math.round((booked / trip.totalSeats) * 100) : 0;
                   const isFull = available === 0;
                   return (
-                    <Card key={trip.id} className={`${isFull ? "opacity-60" : "hover:shadow-md transition-shadow"}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="font-semibold">{trip.tripName}</p>
+                    <Card key={trip.id} className={isFull ? "opacity-70" : "hover:shadow-md transition-shadow"}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate">{trip.tripName}</p>
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <MapPin className="h-3 w-3" /> {trip.departurePoint} → {trip.destination}
+                              <MapPin className="h-3 w-3 shrink-0" /> {trip.departurePoint} → {trip.destination}
                             </p>
                           </div>
                           <Badge className={isFull ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}>
                             {isFull ? "Full" : `${available} left`}
                           </Badge>
                         </div>
-                        <div className="space-y-2 text-xs text-muted-foreground">
-                          <p>📅 {formatDate(trip.startDate)} → {formatDate(trip.endDate)}</p>
-                          <p>💺 Seat: {formatCurrency(trip.seatPrice)}{trip.sleeperSeats > 0 ? ` · Sleeper: ${formatCurrency(trip.sleeperPrice)}` : ""}</p>
+
+                        <p className="text-xs text-muted-foreground">
+                          💺 Seat: {formatCurrency(trip.seatPrice)}{trip.sleeperSeats > 0 ? ` · Sleeper: ${formatCurrency(trip.sleeperPrice)}` : ""}
+                        </p>
+
+                        {/* Seats split */}
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="rounded-lg bg-blue-50 py-2">
+                            <p className="text-lg font-bold text-blue-700 leading-none">{booked}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Booked</p>
+                          </div>
+                          <div className="rounded-lg bg-emerald-50 py-2">
+                            <p className="text-lg font-bold text-emerald-700 leading-none">{available}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Remaining</p>
+                          </div>
+                          <div className="rounded-lg bg-slate-100 py-2">
+                            <p className="text-lg font-bold leading-none">{trip.totalSeats}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Total</p>
+                          </div>
                         </div>
-                        <div className="mt-3">
+
+                        {/* Occupancy */}
+                        <div>
                           <div className="flex justify-between text-xs mb-1">
                             <span className="text-muted-foreground">Occupancy</span>
                             <span>{booked}/{trip.totalSeats} ({pct}%)</span>
                           </div>
                           <Progress value={pct} className="h-1.5" />
                         </div>
+
+                        {/* Countdown */}
+                        <div>
+                          <div className="flex justify-between text-xs mb-1.5">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Departs {formatDate(trip.startDate)}
+                            </span>
+                          </div>
+                          <TripCountdown date={trip.startDate} />
+                        </div>
+
                         <Button
-                          className="w-full mt-3" size="sm"
+                          className="w-full" size="sm"
                           disabled={isFull}
                           onClick={() => navigate("/book", { state: { tripId: trip.id } })}
                         >
