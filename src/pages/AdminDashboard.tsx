@@ -10,10 +10,17 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, Users, Bus, BookOpen, CreditCard,
-  Wallet, AlertCircle, CheckCircle2, Clock, Plus, BarChart3, ArrowRight, MapPin
+  Wallet, AlertCircle, CheckCircle2, Clock, Plus, BarChart3, ArrowRight, MapPin,
+  Coins, Banknote, XCircle, Hourglass
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { TripCountdown } from "@/components/TripCountdown";
+import { toast } from "sonner";
+import type { CoinWithdrawal } from "@/types";
+
+const WD_METHOD_LABELS: Record<CoinWithdrawal["method"], string> = {
+  upi: "UPI", bank_transfer: "Bank Transfer", cash: "Cash",
+};
 
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700",
@@ -24,9 +31,26 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
-  const { trips, bookings, payments, expenses, cashEntries, employees, salaries } = useData();
+  const { trips, bookings, payments, expenses, cashEntries, employees, salaries, coinWithdrawals, setCoinWithdrawals } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const pendingWithdrawals = useMemo(
+    () => [...coinWithdrawals]
+      .filter(w => w.status === "pending" || w.status === "approved")
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)),
+    [coinWithdrawals]
+  );
+
+  function setWithdrawalStatus(w: CoinWithdrawal, status: CoinWithdrawal["status"]) {
+    setCoinWithdrawals(prev => prev.map(x =>
+      x.id === w.id
+        ? { ...x, status, processedAt: new Date().toISOString(), processedBy: user?.name }
+        : x
+    ));
+    const verb = status === "approved" ? "approved" : status === "paid" ? "marked paid" : "rejected";
+    toast.success(`Withdrawal of ${w.coins.toLocaleString()} coins (₹${w.rupeeValue.toFixed(2)}) for ${w.staffName} ${verb}`);
+  }
 
   const stats = useMemo(() => {
     const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
@@ -233,6 +257,65 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Coin Withdrawal Requests */}
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Coins className="h-4 w-4 text-amber-500" /> Coin Withdrawal Requests
+            {pendingWithdrawals.filter(w => w.status === "pending").length > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingWithdrawals.filter(w => w.status === "pending").length} new
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {pendingWithdrawals.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">No pending withdrawal requests.</p>
+          ) : (
+            <div className="divide-y">
+              {pendingWithdrawals.map(w => (
+                <div key={w.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">
+                      {w.staffName} · <span className="text-amber-600">{w.coins.toLocaleString()} 🪙</span>
+                      <span className="text-green-700"> = ₹{w.rupeeValue.toFixed(2)}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {WD_METHOD_LABELS[w.method]}{w.accountDetails ? ` · ${w.accountDetails}` : ""} · {formatDate(w.requestedAt.slice(0, 10))}
+                      {w.notes ? ` · "${w.notes}"` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {w.status === "pending" ? (
+                      <>
+                        <Badge className="bg-amber-100 text-amber-700 gap-1"><Hourglass className="h-3 w-3" /> Pending</Badge>
+                        <Button size="sm" variant="outline" className="h-8 text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => setWithdrawalStatus(w, "rejected")}>
+                          <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                        </Button>
+                        <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700"
+                          onClick={() => setWithdrawalStatus(w, "approved")}>
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Badge className="bg-blue-100 text-blue-700 gap-1"><CheckCircle2 className="h-3 w-3" /> Approved</Badge>
+                        <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700"
+                          onClick={() => setWithdrawalStatus(w, "paid")}>
+                          <Banknote className="h-3.5 w-3.5 mr-1" /> Mark Paid
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Bookings */}
       <Card>

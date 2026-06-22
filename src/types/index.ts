@@ -292,6 +292,24 @@ export interface LoanRepayment {
   notes?: string;
 }
 
+export type CoinWithdrawalMethod = "upi" | "bank_transfer" | "cash";
+export type CoinWithdrawalStatus = "pending" | "approved" | "rejected" | "paid";
+
+export interface CoinWithdrawal {
+  id: string;           // WD-001
+  staffId?: string;
+  staffName: string;
+  coins: number;        // coins requested
+  rupeeValue: number;   // coins / 100
+  method: CoinWithdrawalMethod;
+  accountDetails?: string;  // UPI id / bank acct / note
+  status: CoinWithdrawalStatus;
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  notes?: string;
+}
+
 // ── Legacy — kept so existing Expense / CashBook pages compile ─────────────────
 export interface Passenger {
   id: string;

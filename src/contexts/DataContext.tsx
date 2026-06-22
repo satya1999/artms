@@ -7,7 +7,7 @@ import { api } from "../../convex/_generated/api";
 import type {
   Trip, Passenger, Booking, Payment, Expense, Category,
   CashEntry, BankAccount, BankTransaction, Employee, SalaryRecord, Bus,
-  StaffMember, StaffLoan, LoanRepayment,
+  StaffMember, StaffLoan, LoanRepayment, CoinWithdrawal,
 } from "@/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -87,6 +87,7 @@ interface DataContextType {
   staff: StaffMember[];           setStaff: React.Dispatch<React.SetStateAction<StaffMember[]>>;
   staffLoans: StaffLoan[];        setStaffLoans: React.Dispatch<React.SetStateAction<StaffLoan[]>>;
   loanRepayments: LoanRepayment[]; setLoanRepayments: React.Dispatch<React.SetStateAction<LoanRepayment[]>>;
+  coinWithdrawals: CoinWithdrawal[]; setCoinWithdrawals: React.Dispatch<React.SetStateAction<CoinWithdrawal[]>>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -130,6 +131,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [staff, setStaffLocal]                   = useState<StaffMember[]>([]);
   const [staffLoans, setStaffLoansLocal]         = useState<StaffLoan[]>([]);
   const [loanRepayments, setLoanRepaymentsLocal] = useState<LoanRepayment[]>([]);
+  const [coinWithdrawals, setCoinWithdrawalsLocal] = useState<CoinWithdrawal[]>([]);
 
   // ── Refs — updated every render so smart setters always see latest state ───
   // This is the key fix: getters read from refs (not closures) so mutation
@@ -148,6 +150,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const staffRef          = useRef(staff);          staffRef.current          = staff;
   const staffLoansRef     = useRef(staffLoans);     staffLoansRef.current     = staffLoans;
   const loanRepaymentsRef = useRef(loanRepayments); loanRepaymentsRef.current = loanRepayments;
+  const coinWithdrawalsRef = useRef(coinWithdrawals); coinWithdrawalsRef.current = coinWithdrawals;
 
   // ── Convex queries ─────────────────────────────────────────────────────────
   const cvxTrips           = useQuery(api.trips.getAll);
@@ -164,6 +167,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const cvxStaff           = useQuery(api.staff.getAll);
   const cvxStaffLoans      = useQuery(api.staffLoans.getAll);
   const cvxLoanRepayments  = useQuery(api.loanRepayments.getAll);
+  const cvxCoinWithdrawals = useQuery(api.coinWithdrawals.getAll);
 
   // ── Hydrate local state from Convex (no seeding, real data only) ──────────
   useEffect(() => { if (cvxTrips          !== undefined) setTripsLocal(cvxTrips                   as unknown as Trip[]); },          [cvxTrips]);
@@ -180,13 +184,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (cvxStaff          !== undefined) setStaffLocal(cvxStaff                    as unknown as StaffMember[]); },   [cvxStaff]);
   useEffect(() => { if (cvxStaffLoans     !== undefined) setStaffLoansLocal(cvxStaffLoans          as unknown as StaffLoan[]); },     [cvxStaffLoans]);
   useEffect(() => { if (cvxLoanRepayments !== undefined) setLoanRepaymentsLocal(cvxLoanRepayments  as unknown as LoanRepayment[]); }, [cvxLoanRepayments]);
+  useEffect(() => { if (cvxCoinWithdrawals !== undefined) setCoinWithdrawalsLocal(cvxCoinWithdrawals as unknown as CoinWithdrawal[]); }, [cvxCoinWithdrawals]);
 
   /** True while any Convex query hasn't returned its first result yet */
   const isLoading = [
     cvxTrips, cvxBookings, cvxPayments, cvxExpenses, cvxCategories,
     cvxCashEntries, cvxBankAccounts, cvxBankTrans, cvxEmployees,
     cvxSalaries, cvxBuses, cvxStaff, cvxStaffLoans, cvxLoanRepayments,
-    cvxSettings,
+    cvxCoinWithdrawals, cvxSettings,
   ].some((q) => q === undefined);
 
   // ── Convex mutations ───────────────────────────────────────────────────────
@@ -242,6 +247,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const lrCreate      = useMutation(api.loanRepayments.create);
   const lrRemove      = useMutation(api.loanRepayments.remove);
+
+  const cwCreate      = useMutation(api.coinWithdrawals.create);
+  const cwUpdate      = useMutation(api.coinWithdrawals.update);
+  const cwRemove      = useMutation(api.coinWithdrawals.remove);
 
   // ── Smart setters (write-through to Convex, transparent to pages) ──────────
   const noopUpdate: UpdateMut = useCallback(() => Promise.resolve(), []);
@@ -302,6 +311,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     makeSmartSetter(() => loanRepaymentsRef.current, setLoanRepaymentsLocal, lrCreate, noopUpdate, lrRemove),
     [lrCreate, noopUpdate, lrRemove], // eslint-disable-line
   );
+  const setCoinWithdrawals = useCallback(
+    makeSmartSetter(() => coinWithdrawalsRef.current, setCoinWithdrawalsLocal, cwCreate, cwUpdate, cwRemove),
+    [cwCreate, cwUpdate, cwRemove], // eslint-disable-line
+  );
 
   return (
     <DataContext.Provider value={{
@@ -323,6 +336,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       staff,          setStaff,
       staffLoans,     setStaffLoans,
       loanRepayments, setLoanRepayments,
+      coinWithdrawals, setCoinWithdrawals,
     }}>
       {children}
     </DataContext.Provider>

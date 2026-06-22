@@ -234,6 +234,26 @@ export default defineSchema({
     monthlyTarget: v.optional(v.number()),
   }).index("by_appId", ["id"]),
 
+  coinWithdrawals: defineTable({
+    id: v.string(),
+    staffId: v.optional(v.string()),
+    staffName: v.string(),
+    coins: v.number(),
+    rupeeValue: v.number(),
+    method: v.union(v.literal("upi"), v.literal("bank_transfer"), v.literal("cash")),
+    accountDetails: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"), v.literal("approved"),
+      v.literal("rejected"), v.literal("paid")
+    ),
+    requestedAt: v.string(),
+    processedAt: v.optional(v.string()),
+    processedBy: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  })
+    .index("by_appId", ["id"])
+    .index("by_staffName", ["staffName"]),
+
   loanRepayments: defineTable({
     id: v.string(),
     loanId: v.string(),

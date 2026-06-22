@@ -15,6 +15,7 @@ import type * as bookings from "../bookings.js";
 import type * as buses from "../buses.js";
 import type * as cashEntries from "../cashEntries.js";
 import type * as categories from "../categories.js";
+import type * as coinWithdrawals from "../coinWithdrawals.js";
 import type * as employees from "../employees.js";
 import type * as expenses from "../expenses.js";
 import type * as loanRepayments from "../loanRepayments.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   buses: typeof buses;
   cashEntries: typeof cashEntries;
   categories: typeof categories;
+  coinWithdrawals: typeof coinWithdrawals;
   employees: typeof employees;
   expenses: typeof expenses;
   loanRepayments: typeof loanRepayments;

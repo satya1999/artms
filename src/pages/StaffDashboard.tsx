@@ -2,15 +2,23 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, generateId } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import ChampionshipPanel from "@/components/ChampionshipPanel";
+import { toast } from "sonner";
+import type { CoinWithdrawal, CoinWithdrawalMethod } from "@/types";
 import {
-  Plus, CreditCard, CheckCircle2, Clock, ArrowRight, MapPin, Ticket, Gift, Trophy
+  Plus, CreditCard, CheckCircle2, Clock, ArrowRight, MapPin, Ticket, Gift, Trophy,
+  Coins, Wallet, Banknote, Hourglass, XCircle, History
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,11 +29,34 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
+const WITHDRAWAL_STATUS_META: Record<CoinWithdrawal["status"], { label: string; cls: string; icon: typeof Clock }> = {
+  pending:  { label: "Pending",  cls: "bg-amber-100 text-amber-700",   icon: Hourglass },
+  approved: { label: "Approved", cls: "bg-blue-100 text-blue-700",     icon: CheckCircle2 },
+  paid:     { label: "Paid",     cls: "bg-green-100 text-green-700",    icon: Banknote },
+  rejected: { label: "Rejected", cls: "bg-red-100 text-red-700",       icon: XCircle },
+};
+
+const METHOD_LABELS: Record<CoinWithdrawalMethod, string> = {
+  upi: "UPI",
+  bank_transfer: "Bank Transfer",
+  cash: "Cash",
+};
+
+/** Min coins required to request a withdrawal (= ₹10) */
+const MIN_WITHDRAWAL_COINS = 1000;
+
 export default function StaffDashboard() {
-  const { trips, bookings, payments } = useData();
+  const { trips, bookings, payments, coinWithdrawals, setCoinWithdrawals } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState("home");
+
+  // ── Withdrawal request dialog state ──────────────────────────────────────
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [wdCoins, setWdCoins] = useState("");
+  const [wdMethod, setWdMethod] = useState<CoinWithdrawalMethod>("upi");
+  const [wdAccount, setWdAccount] = useState("");
+  const [wdNotes, setWdNotes] = useState("");
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -34,12 +65,24 @@ export default function StaffDashboard() {
     [bookings, user]
   );
 
+  const myWithdrawals = useMemo(
+    () => [...coinWithdrawals]
+      .filter(w => w.staffName === user?.name)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)),
+    [coinWithdrawals, user]
+  );
+
   const todayPayments = payments.filter(
     p => p.date === today && p.collectedBy === user?.name
   );
 
   const stats = useMemo(() => {
     const totalCoins = myBookings.reduce((s, b) => s + (b.rewardCoins ?? 0), 0);
+    // Coins locked by withdrawals that aren't rejected (pending / approved / paid)
+    const lockedCoins = myWithdrawals
+      .filter(w => w.status !== "rejected")
+      .reduce((s, w) => s + w.coins, 0);
+    const availableCoins = Math.max(0, totalCoins - lockedCoins);
     return {
       totalBookings: myBookings.filter(b => b.status !== "cancelled").length,
       totalCollected: myBookings.reduce((s, b) => s + b.advancePaid, 0),
@@ -47,8 +90,59 @@ export default function StaffDashboard() {
       pendingFromMine: myBookings.filter(b => b.pendingAmount > 0 && b.status !== "cancelled").length,
       totalCoins,
       coinsRupee: totalCoins / 100,
+      lockedCoins,
+      availableCoins,
+      availableRupee: availableCoins / 100,
     };
-  }, [myBookings, todayPayments]);
+  }, [myBookings, myWithdrawals, todayPayments]);
+
+  function openWithdraw() {
+    setWdCoins(String(stats.availableCoins));
+    setWdMethod("upi");
+    setWdAccount("");
+    setWdNotes("");
+    setWithdrawOpen(true);
+  }
+
+  function submitWithdrawal() {
+    const coins = Math.floor(Number(wdCoins));
+    if (!Number.isFinite(coins) || coins <= 0) {
+      toast.error("Enter a valid number of coins to withdraw");
+      return;
+    }
+    if (coins < MIN_WITHDRAWAL_COINS) {
+      toast.error(`Minimum withdrawal is ${MIN_WITHDRAWAL_COINS.toLocaleString()} coins (₹${MIN_WITHDRAWAL_COINS / 100})`);
+      return;
+    }
+    if (coins > stats.availableCoins) {
+      toast.error(`You only have ${stats.availableCoins.toLocaleString()} coins available`);
+      return;
+    }
+    if (!wdAccount.trim()) {
+      toast.error(wdMethod === "cash" ? "Add a note for the cash payout" : "Enter your payout account details");
+      return;
+    }
+    const record: CoinWithdrawal = {
+      id: generateId("WD"),
+      staffId: user?.id,
+      staffName: user?.name ?? "",
+      coins,
+      rupeeValue: coins / 100,
+      method: wdMethod,
+      accountDetails: wdAccount.trim(),
+      status: "pending",
+      requestedAt: new Date().toISOString(),
+      notes: wdNotes.trim() || undefined,
+    };
+    setCoinWithdrawals(prev => [...prev, record]);
+    setWithdrawOpen(false);
+    toast.success(`Withdrawal request for ${coins.toLocaleString()} coins (₹${(coins / 100).toFixed(2)}) submitted for approval`);
+  }
+
+  function cancelWithdrawal(w: CoinWithdrawal) {
+    setCoinWithdrawals(prev => prev.filter(x => x.id !== w.id));
+    toast.success("Withdrawal request cancelled");
+  }
 
   const publishedTrips = trips.filter(t => t.status === "published" || t.status === "active");
 
@@ -140,11 +234,13 @@ export default function StaffDashboard() {
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <Gift className="h-4 w-4 text-amber-500" />
+                  <Coins className="h-4 w-4 text-amber-500" />
                   <p className="text-xs text-muted-foreground">My Coin Balance</p>
                 </div>
                 <p className="text-2xl font-bold text-amber-600">{stats.totalCoins.toLocaleString()} 🪙</p>
-                <p className="text-xs text-muted-foreground">= ₹{stats.coinsRupee.toFixed(2)} · {coinBookings.length} eligible bookings</p>
+                <p className="text-xs text-muted-foreground">
+                  {stats.availableCoins.toLocaleString()} available · ₹{stats.availableRupee.toFixed(2)}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -251,38 +347,118 @@ export default function StaffDashboard() {
 
         {/* ── REWARDS TAB ──────────────────────────────────────────────── */}
         <TabsContent value="rewards" className="space-y-4 mt-4">
-          {/* Coin wallet card */}
-          <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center text-white text-2xl shrink-0">
-                  🪙
+          {/* Coin wallet — refined hero card */}
+          <Card className="overflow-hidden border-0 shadow-sm">
+            <div className="relative bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 text-white">
+              {/* decorative coins */}
+              <Coins className="absolute -right-6 -top-6 h-32 w-32 text-white/10 rotate-12" />
+              <Coins className="absolute right-20 bottom-2 h-16 w-16 text-white/10 -rotate-12" />
+              <div className="relative p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
+                    <Coins className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-white/80">Available to Withdraw</p>
+                    <p className="text-4xl font-black leading-none mt-0.5">
+                      {stats.availableCoins.toLocaleString()}
+                      <span className="text-lg font-semibold text-white/80 ml-1.5">coins</span>
+                    </p>
+                    <p className="text-sm text-white/90 mt-1 font-medium">≈ ₹{stats.availableRupee.toFixed(2)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-amber-700 font-medium uppercase tracking-wider">My Coin Wallet</p>
-                  <p className="text-3xl font-black text-amber-700">{stats.totalCoins.toLocaleString()}</p>
-                </div>
+
+                <Button
+                  onClick={openWithdraw}
+                  disabled={stats.availableCoins < MIN_WITHDRAWAL_COINS}
+                  className="w-full bg-white text-amber-700 hover:bg-white/90 font-semibold shadow-sm disabled:opacity-60"
+                >
+                  <Wallet className="h-4 w-4 mr-1.5" /> Request Withdrawal
+                </Button>
+                {stats.availableCoins < MIN_WITHDRAWAL_COINS && (
+                  <p className="text-center text-xs text-white/80 mt-2">
+                    Earn at least {MIN_WITHDRAWAL_COINS.toLocaleString()} coins (₹{MIN_WITHDRAWAL_COINS / 100}) to withdraw
+                  </p>
+                )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/70 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground mb-0.5">Rupee Value</p>
-                  <p className="text-xl font-bold text-green-700">₹{stats.coinsRupee.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">100 coins = ₹1</p>
-                </div>
-                <div className="bg-white/70 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground mb-0.5">Earned From</p>
-                  <p className="text-xl font-bold">{coinBookings.length}</p>
-                  <p className="text-xs text-muted-foreground">bookings</p>
-                </div>
+            </div>
+
+            {/* breakdown strip */}
+            <CardContent className="grid grid-cols-3 divide-x divide-amber-100 bg-amber-50/60 p-0">
+              <div className="p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Total Earned</p>
+                <p className="text-lg font-bold text-amber-700">{stats.totalCoins.toLocaleString()}</p>
+                <p className="text-[11px] text-muted-foreground">{coinBookings.length} bookings</p>
               </div>
+              <div className="p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">In Withdrawal</p>
+                <p className="text-lg font-bold text-orange-600">{stats.lockedCoins.toLocaleString()}</p>
+                <p className="text-[11px] text-muted-foreground">pending / paid</p>
+              </div>
+              <div className="p-3 text-center">
+                <p className="text-[11px] text-muted-foreground">Rupee Value</p>
+                <p className="text-lg font-bold text-green-700">₹{stats.coinsRupee.toFixed(2)}</p>
+                <p className="text-[11px] text-muted-foreground">100 coins = ₹1</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Withdrawal requests */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-amber-500" /> My Withdrawal Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {myWithdrawals.length === 0 ? (
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  <Wallet className="h-9 w-9 mx-auto mb-2 opacity-30" />
+                  <p>No withdrawal requests yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {myWithdrawals.map(w => {
+                    const meta = WITHDRAWAL_STATUS_META[w.status];
+                    const StatusIcon = meta.icon;
+                    return (
+                      <div key={w.id} className="px-4 py-3 flex items-center justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-semibold">{w.coins.toLocaleString()} 🪙 <span className="text-green-700 font-medium">= ₹{w.rupeeValue.toFixed(2)}</span></p>
+                          <p className="text-xs text-muted-foreground">
+                            {METHOD_LABELS[w.method]}{w.accountDetails ? ` · ${w.accountDetails}` : ""}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{formatDate(w.requestedAt.slice(0, 10))}</p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-1">
+                          <Badge className={`${meta.cls} gap-1`}>
+                            <StatusIcon className="h-3 w-3" /> {meta.label}
+                          </Badge>
+                          {w.status === "pending" && (
+                            <div>
+                              <Button
+                                variant="ghost" size="sm"
+                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                                onClick={() => cancelWithdrawal(w)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Per-booking coin history */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Gift className="h-4 w-4 text-amber-500" /> Coin Earning History
+                <History className="h-4 w-4 text-amber-500" /> Coin Earning History
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -312,6 +488,94 @@ export default function StaffDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Withdrawal request dialog ─────────────────────────────────────── */}
+      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-amber-500" /> Request Coin Withdrawal
+            </DialogTitle>
+            <DialogDescription>
+              Available: <span className="font-semibold text-amber-700">{stats.availableCoins.toLocaleString()} coins</span> (₹{stats.availableRupee.toFixed(2)}). 100 coins = ₹1.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="wd-coins">Coins to withdraw</Label>
+              <Input
+                id="wd-coins"
+                type="number"
+                min={MIN_WITHDRAWAL_COINS}
+                max={stats.availableCoins}
+                step={100}
+                value={wdCoins}
+                onChange={e => setWdCoins(e.target.value)}
+                placeholder={`Min ${MIN_WITHDRAWAL_COINS}`}
+              />
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  = ₹{((Math.floor(Number(wdCoins)) || 0) / 100).toFixed(2)}
+                </span>
+                <button
+                  type="button"
+                  className="text-amber-600 font-medium hover:underline"
+                  onClick={() => setWdCoins(String(stats.availableCoins))}
+                >
+                  Withdraw all
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Payout method</Label>
+              <Select value={wdMethod} onValueChange={v => setWdMethod(v as CoinWithdrawalMethod)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="wd-account">
+                {wdMethod === "upi" ? "UPI ID" : wdMethod === "bank_transfer" ? "Bank account details" : "Note for cash payout"}
+              </Label>
+              <Input
+                id="wd-account"
+                value={wdAccount}
+                onChange={e => setWdAccount(e.target.value)}
+                placeholder={
+                  wdMethod === "upi" ? "name@upi"
+                    : wdMethod === "bank_transfer" ? "A/C no · IFSC · bank name"
+                    : "e.g. Hand over at office"
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="wd-notes">Notes (optional)</Label>
+              <Textarea
+                id="wd-notes"
+                value={wdNotes}
+                onChange={e => setWdNotes(e.target.value)}
+                rows={2}
+                placeholder="Anything the admin should know"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)}>Cancel</Button>
+            <Button onClick={submitWithdrawal} className="bg-amber-500 hover:bg-amber-600">
+              <Coins className="h-4 w-4 mr-1.5" /> Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
