@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockUsers } from "@/data/mockData";
 import { formatDate, hasRole, effectiveRoles } from "@/lib/utils";
 import type { User, UserRole } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit2, Shield, ShieldCheck } from "lucide-react";
+import { Plus, Edit2, Shield, ShieldCheck, KeyRound, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 const ALL_ROLES: UserRole[] = ["super_admin", "accountant", "booking_executive", "tour_manager"];
@@ -30,16 +31,40 @@ const ROLE_COLORS: Record<UserRole, string> = {
   tour_manager: "bg-green-100 text-green-700",
 };
 
-type FormState = { name: string; email: string; phone: string; roles: UserRole[]; active: boolean };
+type FormState = {
+  name: string;
+  email: string;
+  phone: string;
+  roles: UserRole[];
+  active: boolean;
+  password: string;
+};
 
-const EMPTY_FORM: FormState = { name: "", email: "", phone: "", roles: ["booking_executive"], active: true };
+const EMPTY_FORM: FormState = {
+  name: "",
+  email: "",
+  phone: "",
+  roles: ["booking_executive"],
+  active: true,
+  password: "",
+};
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<User[]>(mockUsers);
+
+  // Load users from Convex (passwordHash is stripped server-side)
+  const cvxUsers = useQuery(api.users.getAll);
+  const createUser = useMutation(api.users.create);
+  const updateUser = useMutation(api.users.update);
+  const resetPasswordMut = useMutation(api.users.resetPassword);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const users: User[] = (cvxUsers as unknown as User[]) ?? [];
 
   const f = (field: keyof Omit<FormState, "roles">, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -66,50 +91,103 @@ export default function UserManagement() {
   const openCreate = () => {
     setEditingUser(null);
     setForm(EMPTY_FORM);
+    setShowPassword(false);
     setDialogOpen(true);
   };
 
   const openEdit = (u: User) => {
     setEditingUser(u);
-    setForm({ name: u.name, email: u.email, phone: u.phone || "", roles: effectiveRoles(u), active: u.active });
+    setForm({
+      name: u.name,
+      email: u.email,
+      phone: u.phone || "",
+      roles: effectiveRoles(u),
+      active: u.active,
+      password: "",
+    });
+    setShowPassword(false);
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
-    if (!form.name || !form.email) { toast.error("Name and email required"); return; }
-    if (form.roles.length === 0) { toast.error("Select at least one role"); return; }
+  const handleSave = async () => {
+    if (!form.name || !form.email) {
+      toast.error("Name and email required");
+      return;
+    }
+    if (form.roles.length === 0) {
+      toast.error("Select at least one role");
+      return;
+    }
 
     const primaryRole = form.roles[0];
+    setSaving(true);
 
-    if (editingUser) {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === editingUser.id
-            ? { ...u, name: form.name, email: form.email, phone: form.phone, role: primaryRole, roles: form.roles, active: form.active }
-            : u
-        )
-      );
-      toast.success("User updated");
-    } else {
-      const newUser: User = {
-        id: `U${String(users.length + 1).padStart(3, "0")}`,
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        role: primaryRole,
-        roles: form.roles,
-        active: form.active,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-      setUsers((prev) => [...prev, newUser]);
-      toast.success("User created — default password: artms@2026");
+    try {
+      if (editingUser) {
+        await updateUser({
+          id: editingUser.id,
+          updates: {
+            name: form.name,
+            email: form.email,
+            phone: form.phone || undefined,
+            role: primaryRole,
+            roles: form.roles,
+            active: form.active,
+          },
+        });
+        toast.success("User updated");
+      } else {
+        const newId = `U${String(users.length + 1).padStart(3, "0")}-${Date.now()}`;
+        await createUser({
+          id: newId,
+          name: form.name,
+          email: form.email,
+          phone: form.phone || undefined,
+          role: primaryRole,
+          roles: form.roles,
+          password: form.password || undefined,
+          active: form.active,
+          createdAt: new Date().toISOString().split("T")[0],
+        });
+        toast.success(
+          form.password
+            ? "User created with custom password"
+            : "User created — default password: artms@2026",
+        );
+      }
+      setDialogOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save user";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
     }
-    setDialogOpen(false);
   };
 
-  const toggleActive = (id: string) => {
-    if (id === currentUser?.id) { toast.error("Cannot deactivate your own account"); return; }
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, active: !u.active } : u)));
+  const toggleActive = async (u: User) => {
+    if (u.id === currentUser?.id) {
+      toast.error("Cannot deactivate your own account");
+      return;
+    }
+    try {
+      await updateUser({ id: u.id, updates: { active: !u.active } });
+      toast.success(u.active ? "User deactivated" : "User activated");
+    } catch {
+      toast.error("Failed to update user status");
+    }
+  };
+
+  const handleResetPassword = async (u: User) => {
+    if (u.id === currentUser?.id) {
+      toast.error("Use Change Password to update your own password");
+      return;
+    }
+    try {
+      await resetPasswordMut({ id: u.id });
+      toast.success(`Password reset to default for ${u.name}`);
+    } catch {
+      toast.error("Failed to reset password");
+    }
   };
 
   return (
@@ -183,14 +261,24 @@ export default function UserManagement() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(u)} title="Edit user">
                       <Edit2 className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost" size="icon"
-                      className={u.active ? "text-red-500 hover:text-red-700" : "text-green-500 hover:text-green-700"}
-                      onClick={() => toggleActive(u.id)}
+                      className="text-amber-500 hover:text-amber-700"
+                      onClick={() => handleResetPassword(u)}
                       disabled={u.id === currentUser?.id}
+                      title="Reset password to default"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon"
+                      className={u.active ? "text-red-500 hover:text-red-700" : "text-green-500 hover:text-green-700"}
+                      onClick={() => toggleActive(u)}
+                      disabled={u.id === currentUser?.id}
+                      title={u.active ? "Deactivate" : "Activate"}
                     >
                       {u.active ? <ShieldCheck className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
                     </Button>
@@ -294,15 +382,40 @@ export default function UserManagement() {
               )}
             </div>
 
+            {/* Password field for new users */}
             {!editingUser && (
-              <p className="text-xs text-muted-foreground bg-blue-50 p-2 rounded">
-                Default password: <code>artms@2026</code>
-              </p>
+              <div className="space-y-2">
+                <Label>
+                  Password{" "}
+                  <span className="text-xs text-muted-foreground font-normal">(leave blank for default)</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => f("password", e.target.value)}
+                    placeholder="artms@2026"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground bg-blue-50 p-2 rounded">
+                  Default password: <code>artms@2026</code>
+                </p>
+              </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Save User</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save User"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

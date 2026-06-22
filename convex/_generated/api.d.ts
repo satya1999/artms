@@ -24,6 +24,7 @@ import type * as settings from "../settings.js";
 import type * as staff from "../staff.js";
 import type * as staffLoans from "../staffLoans.js";
 import type * as trips from "../trips.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   staff: typeof staff;
   staffLoans: typeof staffLoans;
   trips: typeof trips;
+  users: typeof users;
 }>;
 
 /**

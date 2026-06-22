@@ -247,4 +247,24 @@ export default defineSchema({
   })
     .index("by_appId", ["id"])
     .index("by_loanId", ["loanId"]),
+
+  users: defineTable({
+    id: v.string(),
+    name: v.string(),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    role: v.union(
+      v.literal("super_admin"), v.literal("accountant"),
+      v.literal("booking_executive"), v.literal("tour_manager")
+    ),
+    roles: v.optional(v.array(v.union(
+      v.literal("super_admin"), v.literal("accountant"),
+      v.literal("booking_executive"), v.literal("tour_manager")
+    ))),
+    passwordHash: v.string(),
+    active: v.boolean(),
+    createdAt: v.string(),
+  })
+    .index("by_appId", ["id"])
+    .index("by_email", ["email"]),
 });

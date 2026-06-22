@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -7,6 +7,7 @@ import { DataProvider } from "@/contexts/DataContext";
 import { BrandMark } from "@/components/BrandLogo";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
+import SplashScreen from "@/components/SplashScreen";
 
 // Route pages are code-split so each screen (and heavy libs like Recharts)
 // loads on demand instead of bloating the initial bundle.
@@ -39,7 +40,12 @@ function PageFallback() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const hideSplash = useCallback(() => setShowSplash(false), []);
+
   return (
+    <>
+      {showSplash && <SplashScreen onFinish={hideSplash} />}
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <DataProvider>
@@ -74,5 +80,6 @@ export default function App() {
         </DataProvider>
       </AuthProvider>
     </QueryClientProvider>
+    </>
   );
 }

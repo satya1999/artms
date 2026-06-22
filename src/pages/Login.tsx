@@ -28,15 +28,20 @@ export default function Login() {
   // them on the login screen.
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSubmitting(true);
-    const ok = login(email, password);
-    if (ok) {
-      navigate("/dashboard");
-    } else {
-      setError("Invalid credentials. Please check your email and password.");
+    try {
+      const ok = await login(email, password);
+      if (ok) {
+        navigate("/dashboard");
+      } else {
+        setError("Invalid credentials. Please check your email and password.");
+        setSubmitting(false);
+      }
+    } catch {
+      setError("Login failed. Please try again.");
       setSubmitting(false);
     }
   };
