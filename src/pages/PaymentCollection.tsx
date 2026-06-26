@@ -12,7 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, CreditCard, Banknote, Smartphone, Building2, ReceiptText, Edit2, PenLine } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Search, CreditCard, Banknote, Smartphone, Building2, ReceiptText, Edit2, PenLine, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 const MODE_ICONS: Record<PaymentMode, React.ElementType> = {
@@ -165,6 +166,13 @@ export default function PaymentCollection() {
     setEditDialogOpen(false);
   };
 
+  const toggleBoarded = (bookingId: string, boarded: boolean) => {
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) { toast.error("Booking not found"); return; }
+    setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, boarded } : b));
+    toast.success(boarded ? `${booking.passengerName} marked as boarded` : `${booking.passengerName} boarding cleared`);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -258,6 +266,8 @@ export default function PaymentCollection() {
                 <TableHead>Payment ID</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Passenger</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Seat</TableHead>
                 <TableHead>Trip</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Mode</TableHead>
@@ -265,12 +275,14 @@ export default function PaymentCollection() {
                 <TableHead>Reference</TableHead>
                 <TableHead>Collected By</TableHead>
                 <TableHead>Signed</TableHead>
+                <TableHead className="text-center">Boarding</TableHead>
                 {isAdmin && <TableHead className="w-16">Edit</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map(p => {
                 const Icon = MODE_ICONS[p.mode];
+                const booking = bookings.find(b => b.id === p.bookingId);
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-mono text-xs">{p.id}</TableCell>
@@ -278,6 +290,16 @@ export default function PaymentCollection() {
                     <TableCell>
                       <p className="font-medium text-sm">{p.passengerName}</p>
                       <p className="text-xs text-muted-foreground">{p.bookingId}</p>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[12rem]">
+                      {booking?.passengerAddress
+                        ? <span className="flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" />{booking.passengerAddress}</span>
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {booking
+                        ? <span>{booking.seatNumber} <span className="text-xs text-muted-foreground">({booking.seatType})</span></span>
+                        : "—"}
                     </TableCell>
                     <TableCell className="text-sm">{p.tripName}</TableCell>
                     <TableCell className="font-semibold text-green-600">{formatCurrency(p.amount)}</TableCell>
@@ -296,6 +318,14 @@ export default function PaymentCollection() {
                         : <span className="text-xs text-muted-foreground">—</span>
                       }
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox
+                        checked={!!booking?.boarded}
+                        disabled={!booking}
+                        onCheckedChange={(v) => toggleBoarded(p.bookingId, v === true)}
+                        aria-label="Mark boarding"
+                      />
+                    </TableCell>
                     {isAdmin && (
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}>
@@ -308,7 +338,7 @@ export default function PaymentCollection() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={isAdmin ? 11 : 10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isAdmin ? 14 : 13} className="text-center py-8 text-muted-foreground">
                     No payments found
                   </TableCell>
                 </TableRow>

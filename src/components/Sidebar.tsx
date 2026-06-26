@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Bus, BookOpen, CreditCard, Receipt,
   BookMarked, Building2, Wallet, BarChart3, UserCog, Settings,
   LogOut, ChevronLeft, TrendingUp, Users, Banknote, X, Trophy,
-  KeyRound, Eye, EyeOff, Loader2
+  KeyRound, Eye, EyeOff, Loader2, MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,11 +29,13 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/championship", icon: Trophy, label: "Championship" },
 
   { to: "/trips",    icon: Bus,       label: "Trips",         section: "Booking" },
+  { to: "/tour-manager", icon: MapPin, label: "My Trips",     roles: ["tour_manager"] },
   { to: "/book",     icon: BookOpen,  label: "New Booking",   roles: ["super_admin", "booking_executive"] },
   { to: "/bookings", icon: BookOpen,  label: "All Bookings",  roles: ["super_admin", "accountant", "booking_executive"] },
   { to: "/payments", icon: CreditCard,label: "Payments",      roles: ["super_admin", "accountant", "booking_executive"] },
 
   { to: "/expenses", icon: Receipt,   label: "Expenses",      roles: ["super_admin", "accountant"], section: "Accounting" },
+  { to: "/trip-wallets", icon: Wallet, label: "Trip Wallets", roles: ["super_admin", "accountant"] },
   { to: "/cashbook", icon: BookMarked,label: "Cash Book",     roles: ["super_admin", "accountant"] },
   { to: "/bank",     icon: Building2, label: "Bank",          roles: ["super_admin", "accountant"] },
   { to: "/salary",   icon: Wallet,    label: "Salary",        roles: ["super_admin", "accountant"] },

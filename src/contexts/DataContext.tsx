@@ -7,7 +7,7 @@ import { api } from "../../convex/_generated/api";
 import type {
   Trip, Passenger, Booking, Payment, Expense, Category,
   CashEntry, BankAccount, BankTransaction, Employee, SalaryRecord, Bus,
-  StaffMember, StaffLoan, LoanRepayment, CoinWithdrawal,
+  StaffMember, StaffLoan, LoanRepayment, CoinWithdrawal, TripIncome, TripFund,
 } from "@/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -88,6 +88,8 @@ interface DataContextType {
   staffLoans: StaffLoan[];        setStaffLoans: React.Dispatch<React.SetStateAction<StaffLoan[]>>;
   loanRepayments: LoanRepayment[]; setLoanRepayments: React.Dispatch<React.SetStateAction<LoanRepayment[]>>;
   coinWithdrawals: CoinWithdrawal[]; setCoinWithdrawals: React.Dispatch<React.SetStateAction<CoinWithdrawal[]>>;
+  tripIncomes: TripIncome[];         setTripIncomes: React.Dispatch<React.SetStateAction<TripIncome[]>>;
+  tripFunds: TripFund[];             setTripFunds: React.Dispatch<React.SetStateAction<TripFund[]>>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -132,6 +134,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [staffLoans, setStaffLoansLocal]         = useState<StaffLoan[]>([]);
   const [loanRepayments, setLoanRepaymentsLocal] = useState<LoanRepayment[]>([]);
   const [coinWithdrawals, setCoinWithdrawalsLocal] = useState<CoinWithdrawal[]>([]);
+  const [tripIncomes, setTripIncomesLocal]           = useState<TripIncome[]>([]);
+  const [tripFunds, setTripFundsLocal]               = useState<TripFund[]>([]);
 
   // ── Refs — updated every render so smart setters always see latest state ───
   // This is the key fix: getters read from refs (not closures) so mutation
@@ -151,6 +155,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const staffLoansRef     = useRef(staffLoans);     staffLoansRef.current     = staffLoans;
   const loanRepaymentsRef = useRef(loanRepayments); loanRepaymentsRef.current = loanRepayments;
   const coinWithdrawalsRef = useRef(coinWithdrawals); coinWithdrawalsRef.current = coinWithdrawals;
+  const tripIncomesRef     = useRef(tripIncomes);     tripIncomesRef.current     = tripIncomes;
+  const tripFundsRef       = useRef(tripFunds);       tripFundsRef.current       = tripFunds;
 
   // ── Convex queries ─────────────────────────────────────────────────────────
   const cvxTrips           = useQuery(api.trips.getAll);
@@ -168,6 +174,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const cvxStaffLoans      = useQuery(api.staffLoans.getAll);
   const cvxLoanRepayments  = useQuery(api.loanRepayments.getAll);
   const cvxCoinWithdrawals = useQuery(api.coinWithdrawals.getAll);
+  const cvxTripIncomes     = useQuery(api.tripIncomes.getAll);
+  const cvxTripFunds       = useQuery(api.tripFunds.getAll);
 
   // ── Hydrate local state from Convex (no seeding, real data only) ──────────
   useEffect(() => { if (cvxTrips          !== undefined) setTripsLocal(cvxTrips                   as unknown as Trip[]); },          [cvxTrips]);
@@ -185,13 +193,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (cvxStaffLoans     !== undefined) setStaffLoansLocal(cvxStaffLoans          as unknown as StaffLoan[]); },     [cvxStaffLoans]);
   useEffect(() => { if (cvxLoanRepayments !== undefined) setLoanRepaymentsLocal(cvxLoanRepayments  as unknown as LoanRepayment[]); }, [cvxLoanRepayments]);
   useEffect(() => { if (cvxCoinWithdrawals !== undefined) setCoinWithdrawalsLocal(cvxCoinWithdrawals as unknown as CoinWithdrawal[]); }, [cvxCoinWithdrawals]);
+  useEffect(() => { if (cvxTripIncomes     !== undefined) setTripIncomesLocal(cvxTripIncomes         as unknown as TripIncome[]); },     [cvxTripIncomes]);
+  useEffect(() => { if (cvxTripFunds       !== undefined) setTripFundsLocal(cvxTripFunds             as unknown as TripFund[]); },       [cvxTripFunds]);
 
   /** True while any Convex query hasn't returned its first result yet */
   const isLoading = [
     cvxTrips, cvxBookings, cvxPayments, cvxExpenses, cvxCategories,
     cvxCashEntries, cvxBankAccounts, cvxBankTrans, cvxEmployees,
     cvxSalaries, cvxBuses, cvxStaff, cvxStaffLoans, cvxLoanRepayments,
-    cvxCoinWithdrawals, cvxSettings,
+    cvxCoinWithdrawals, cvxTripIncomes, cvxTripFunds, cvxSettings,
   ].some((q) => q === undefined);
 
   // ── Convex mutations ───────────────────────────────────────────────────────
@@ -251,6 +261,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const cwCreate      = useMutation(api.coinWithdrawals.create);
   const cwUpdate      = useMutation(api.coinWithdrawals.update);
   const cwRemove      = useMutation(api.coinWithdrawals.remove);
+
+  const tiCreate     = useMutation(api.tripIncomes.create);
+  const tiUpdate     = useMutation(api.tripIncomes.update);
+  const tiRemove     = useMutation(api.tripIncomes.remove);
+
+  const tfCreate     = useMutation(api.tripFunds.create);
+  const tfUpdate     = useMutation(api.tripFunds.update);
+  const tfRemove     = useMutation(api.tripFunds.remove);
 
   // ── Smart setters (write-through to Convex, transparent to pages) ──────────
   const noopUpdate: UpdateMut = useCallback(() => Promise.resolve(), []);
@@ -315,6 +333,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     makeSmartSetter(() => coinWithdrawalsRef.current, setCoinWithdrawalsLocal, cwCreate, cwUpdate, cwRemove),
     [cwCreate, cwUpdate, cwRemove], // eslint-disable-line
   );
+  const setTripIncomes = useCallback(
+    makeSmartSetter(() => tripIncomesRef.current, setTripIncomesLocal, tiCreate, tiUpdate, tiRemove),
+    [tiCreate, tiUpdate, tiRemove], // eslint-disable-line
+  );
+  const setTripFunds = useCallback(
+    makeSmartSetter(() => tripFundsRef.current, setTripFundsLocal, tfCreate, tfUpdate, tfRemove),
+    [tfCreate, tfUpdate, tfRemove], // eslint-disable-line
+  );
 
   return (
     <DataContext.Provider value={{
@@ -337,6 +363,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       staffLoans,     setStaffLoans,
       loanRepayments, setLoanRepayments,
       coinWithdrawals, setCoinWithdrawals,
+      tripIncomes,     setTripIncomes,
+      tripFunds,       setTripFunds,
     }}>
       {children}
     </DataContext.Provider>

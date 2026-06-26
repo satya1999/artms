@@ -31,6 +31,8 @@ export interface Trip {
   status: TripStatus;
   createdAt: string;
   inclusions?: string;
+  /** Planned total expense budget for the trip (admin-set) */
+  budget?: number;
 }
 
 export type CategoryType = "expense" | "income" | "general";
@@ -92,6 +94,8 @@ export interface Booking {
   paymentScreenshot?: string;
   paymentProofStatus?: PaymentProofStatus;
   rewardCoins?: number;
+  /** Whether the passenger has boarded the bus */
+  boarded?: boolean;
 }
 
 export type PaymentMode = "cash" | "upi" | "bank_transfer" | "card" | "cheque";
@@ -123,7 +127,16 @@ export type TripExpenseCategory =
   | "parking"
   | "permit_fees"
   | "medical"
-  | "other";
+  | "other"
+  // ── Tour Manager quick-entry categories ──
+  | "food_catering"
+  | "hotel_accommodation"
+  | "fuel"
+  | "driver_allowance"
+  | "local_transport"
+  | "entry_fees"
+  | "emergency"
+  | "miscellaneous";
 
 export type CompanyExpenseCategory =
   | "office_rent"
@@ -145,10 +158,51 @@ export interface Expense {
   description: string;
   amount: number;
   vendorName?: string;
-  billUrl?: string;
+  billUrl?: string;          // receipt image (compressed data URL)
   approvedBy?: string;
   paymentMode: PaymentMode;
   addedBy: string;
+  notes?: string;
+  createdAt?: string;        // ISO timestamp (for transaction history)
+}
+
+// ── Trip Income (Tour Manager) ────────────────────────────────────────────────
+
+export type TripIncomeCategory =
+  | "tips"
+  | "on_trip_sales"
+  | "sponsorship"
+  | "penalty_recovery"
+  | "other";
+
+export interface TripIncome {
+  id: string;
+  date: string;
+  tripId: string;
+  tripName: string;
+  category: TripIncomeCategory;
+  description: string;
+  amount: number;
+  paymentMode: PaymentMode;
+  addedBy: string;
+  notes?: string;
+}
+
+// ── Trip Wallet — admin funds transferred to a tour manager for a trip ─────────
+// Wallet balance for a (trip, manager) = sum(TripFund.amount) − sum(trip
+// expenses addedBy that manager for that trip).
+
+export interface TripFund {
+  id: string;            // FUND-...
+  date: string;
+  tripId: string;
+  tripName: string;
+  managerId?: string;
+  managerName: string;   // tour manager who receives the funds
+  amount: number;
+  mode: PaymentMode;
+  transferredBy: string; // admin who transferred
+  notes?: string;
 }
 
 export type CashEntryType = "in" | "out";

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Plus, Search, Eye, CheckCircle2, XCircle, Clock,
-  Phone, MapPin, CreditCard, User, ImageIcon, Pencil
+  Phone, MapPin, CreditCard, User, ImageIcon, Pencil, Download
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -103,6 +103,70 @@ export default function BookingManagement() {
       })
       .sort((a, b) => b.bookingDateTime.localeCompare(a.bookingDateTime));
   }, [bookings, search, tripFilter, statusFilter, proofFilter]);
+
+  const downloadCSV = () => {
+    const escapeCSV = (val: string | number | undefined | null): string => {
+      if (val == null) return "";
+      const str = String(val);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    const headers = [
+      "Booking ID", "Booking Date", "Booking DateTime",
+      "Passenger Name", "Mobile", "Age", "Gender", "Address", "Aadhaar",
+      "Trip Name", "Seat Number", "Seat Type",
+      "Package Amount", "Discount", "Discount Reason", "Final Amount",
+      "Advance Paid", "Pending Amount",
+      "Status", "Source", "Payment Mode", "Payment Reference",
+      "Payment Proof Status", "Collected By", "Staff ID",
+      "Reward Coins", "Notes"
+    ];
+
+    const rows = filtered.map(b => [
+      b.id,
+      b.bookingDate,
+      b.bookingDateTime,
+      b.passengerName,
+      b.passengerMobile,
+      b.passengerAge ?? "",
+      b.passengerGender ?? "",
+      b.passengerAddress ?? "",
+      b.passengerAadhaar ?? "",
+      b.tripName,
+      b.seatNumber,
+      b.seatType,
+      b.packageAmount,
+      b.discount,
+      b.discountReason ?? "",
+      b.finalAmount,
+      b.advancePaid,
+      b.pendingAmount,
+      b.status.replace(/_/g, " "),
+      b.source.replace(/_/g, " "),
+      b.paymentMode?.replace(/_/g, " ") ?? "",
+      b.paymentReferenceNumber ?? "",
+      b.paymentProofStatus ?? "",
+      b.collectedBy,
+      b.staffId ?? "",
+      b.rewardCoins ?? "",
+      b.notes ?? "",
+    ].map(escapeCSV));
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `bookings_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded ${filtered.length} booking(s) as CSV`);
+  };
 
   const viewBooking = viewId ? bookings.find(b => b.id === viewId) : null;
 
@@ -201,6 +265,11 @@ export default function BookingManagement() {
           <p className="text-muted-foreground text-sm">{bookings.length} total bookings</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <Button variant="outline" onClick={downloadCSV}>
+              <Download className="h-4 w-4 mr-1" /> Download CSV
+            </Button>
+          )}
           <Button onClick={() => navigate("/book")}>
             <Plus className="h-4 w-4 mr-1" /> New Booking
           </Button>
@@ -269,6 +338,7 @@ export default function BookingManagement() {
                 <TableHead>Contact</TableHead>
                 <TableHead>Age / Gender</TableHead>
                 <TableHead>Trip / Seat</TableHead>
+                <TableHead>Booked By</TableHead>
                 <TableHead>Package</TableHead>
                 <TableHead>Discount</TableHead>
                 <TableHead>Final Amt</TableHead>
@@ -302,6 +372,9 @@ export default function BookingManagement() {
                     <TableCell>
                       <p className="text-xs font-medium">{b.tripName}</p>
                       <p className="text-xs text-muted-foreground">Seat {b.seatNumber} ({b.seatType})</p>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-xs font-medium">{b.collectedBy || "—"}</p>
                     </TableCell>
                     <TableCell className="text-xs">{formatCurrency(b.packageAmount)}</TableCell>
                     <TableCell>
@@ -346,7 +419,7 @@ export default function BookingManagement() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={14} className="text-center py-10 text-muted-foreground">
                     No bookings found
                   </TableCell>
                 </TableRow>

@@ -28,6 +28,8 @@ const CategoryManagement = lazy(() => import("@/pages/CategoryManagement"));
 const StaffManagement = lazy(() => import("@/pages/StaffManagement"));
 const StaffLoan = lazy(() => import("@/pages/StaffLoan"));
 const Championship = lazy(() => import("@/pages/Championship"));
+const TourManagerPanel = lazy(() => import("@/pages/TourManagerPanel"));
+const TripWallet = lazy(() => import("@/pages/TripWallet"));
 
 const queryClient = new QueryClient();
 
@@ -67,6 +69,8 @@ export default function App() {
                   <Route path="/book" element={<NewBooking />} />
                   <Route path="/performance" element={<StaffPerformance />} />
                   <Route path="/championship" element={<Championship />} />
+                  <Route path="/tour-manager" element={<TourManagerPanel />} />
+                  <Route path="/trip-wallets" element={<TripWallet />} />
                   <Route path="/categories" element={<CategoryManagement />} />
                   <Route path="/staff" element={<StaffManagement />} />
                   <Route path="/staff-loans" element={<StaffLoan />} />

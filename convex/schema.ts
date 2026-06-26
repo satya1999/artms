@@ -25,6 +25,7 @@ export default defineSchema({
     ),
     createdAt: v.string(),
     inclusions: v.optional(v.string()),
+    budget: v.optional(v.number()),
   }).index("by_appId", ["id"]),
 
   bookings: defineTable({
@@ -64,6 +65,7 @@ export default defineSchema({
       v.literal("pending"), v.literal("approved"), v.literal("rejected")
     )),
     rewardCoins: v.optional(v.number()),
+    boarded: v.optional(v.boolean()),
   })
     .index("by_appId", ["id"])
     .index("by_tripId", ["tripId"])
@@ -99,7 +101,43 @@ export default defineSchema({
     approvedBy: v.optional(v.string()),
     paymentMode: paymentModeV,
     addedBy: v.string(),
+    notes: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
   }).index("by_appId", ["id"]),
+
+  tripIncomes: defineTable({
+    id: v.string(),
+    date: v.string(),
+    tripId: v.string(),
+    tripName: v.string(),
+    category: v.union(
+      v.literal("tips"), v.literal("on_trip_sales"),
+      v.literal("sponsorship"), v.literal("penalty_recovery"),
+      v.literal("other")
+    ),
+    description: v.string(),
+    amount: v.number(),
+    paymentMode: paymentModeV,
+    addedBy: v.string(),
+    notes: v.optional(v.string()),
+  })
+    .index("by_appId", ["id"])
+    .index("by_tripId", ["tripId"]),
+
+  tripFunds: defineTable({
+    id: v.string(),
+    date: v.string(),
+    tripId: v.string(),
+    tripName: v.string(),
+    managerId: v.optional(v.string()),
+    managerName: v.string(),
+    amount: v.number(),
+    mode: paymentModeV,
+    transferredBy: v.string(),
+    notes: v.optional(v.string()),
+  })
+    .index("by_appId", ["id"])
+    .index("by_tripId", ["tripId"]),
 
   categories: defineTable({
     id: v.string(),

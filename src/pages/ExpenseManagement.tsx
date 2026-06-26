@@ -100,6 +100,7 @@ export default function ExpenseManagement() {
           <TableHead>Description</TableHead>
           <TableHead>Category</TableHead>
           <TableHead>Vendor</TableHead>
+          <TableHead>Spent By</TableHead>
           <TableHead>Mode</TableHead>
           <TableHead>Amount</TableHead>
           <TableHead className="w-16">Del</TableHead>
@@ -117,6 +118,7 @@ export default function ExpenseManagement() {
               <Badge variant="outline" className="text-xs capitalize">{e.category.replace("_", " ")}</Badge>
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">{e.vendorName || "—"}</TableCell>
+            <TableCell className="text-sm">{e.addedBy || "—"}</TableCell>
             <TableCell>
               <Badge variant="secondary" className="text-xs capitalize">{e.paymentMode.replace("_", " ")}</Badge>
             </TableCell>
@@ -129,7 +131,7 @@ export default function ExpenseManagement() {
           </TableRow>
         ))}
         {list.length === 0 && (
-          <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No expenses recorded</TableCell></TableRow>
+          <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No expenses recorded</TableCell></TableRow>
         )}
       </TableBody>
     </Table></div>
@@ -294,6 +296,7 @@ export default function ExpenseManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
